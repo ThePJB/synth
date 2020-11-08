@@ -3,8 +3,8 @@
 
 #include "wavetable.h"
 
-#define MAX_PARENTS 2
-#define FRAMES_PER_BUFFER 256   
+#define MAX_PARENTS 4
+#define FRAMES_PER_BUFFER 256
 
 typedef enum {
     ENV_A,

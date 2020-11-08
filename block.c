@@ -30,10 +30,12 @@ void grab(block *b, float *buf) {
     } else if (b->type == BLOCK_MIXER) {
         float A[FRAMES_PER_BUFFER];
         float B[FRAMES_PER_BUFFER];
+        float C[FRAMES_PER_BUFFER];
         grab(b->parents[0], A);
         grab(b->parents[1], B);
+        grab(b->parents[2], C);
         for (int i = 0; i < FRAMES_PER_BUFFER; i++) {
-            *buf++ = 0.5*A[i] + 0.5*B[i];
+            *buf++ = 0.5*A[i] + 0.5*B[i] + 0.5*C[i];
         }
     } else if (b->type == BLOCK_ENVELOPE) {
         float A[FRAMES_PER_BUFFER];

@@ -101,16 +101,8 @@ static int test_callback(
     stereo *data = (stereo*)userData;  // whats userdata?
     float *out = (float*)outputBuffer;
     
-
-    for (int i = 0; i < framesPerBuffer; i++) {
-        grab(data->out_block, out); 
-        /*
-        *out++  = data->amplitude * wt_sample(data->current_wavetable);
-        *out++  = data->amplitude * wt_sample(data->current_wavetable);
-        wt_walk(data->current_wavetable, data->steps);
-        */
-    }
-
+    grab(data->out_block, out); 
+    
     return 0;
 }
 
@@ -151,7 +143,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < wt_len; i++) {
         wt_saw.data[i] = (float)((double)i/(double)(wt_len));
     }
-    wt_square = wt_create(wt_len, 100);
+    wt_square = wt_create(wt_len, 40);
     for (int i = 0; i < wt_len; i++) {
         if (i < wt_len/2) {
             wt_square.data[i] = 1;
@@ -185,10 +177,10 @@ int main(int argc, char** argv) {
     block qadsr = {
         .type = BLOCK_ENVELOPE,
         .data.env = {
-            .attack = 480000,
-            .decay = 480000,
+            .attack = 3000,
+            .decay = 3000,
             .sustain = 0.5,
-            .release = 480000,
+            .release = 4800,
             .previous = 0,
             .sample_counter = 0,
             .state = ENV_OFF,
@@ -215,10 +207,10 @@ int main(int argc, char** argv) {
     block wadsr = {
         .type = BLOCK_ENVELOPE,
         .data.env = {
-            .attack = 48000,
-            .decay = 4800000,
+            .attack = 1000,
+            .decay = 20000,
             .sustain = 0.0,
-            .release = 4800000,
+            .release = 3000,
             .previous = 0,
             .sample_counter = 0,
             .state = ENV_OFF,
@@ -232,11 +224,42 @@ int main(int argc, char** argv) {
     wgate.parents[1] = &wadsr;
 
 
+    // E Key
+    block kick_osc = {
+        .type = BLOCK_WAVETABLE,
+        .data.wt = &wt_square,
+    };
+    block kick_trigger = {
+        .type = BLOCK_TRIGGER,
+        .data.constant = 0,
+    };
+    block kick_adsr = {
+        .type = BLOCK_ENVELOPE,
+        .data.env = {
+            .attack = 2400,
+            .decay = 4800,
+            .sustain = 0.0,
+            .release = 4800,
+            .previous = 0,
+            .sample_counter = 0,
+            .state = ENV_OFF,
+        }
+    };
+    kick_adsr.parents[0] = &kick_trigger;
+    block kick_gate = {
+        .type = BLOCK_GATE,
+    };
+    kick_gate.parents[0] = &kick_osc;
+    kick_gate.parents[1] = &kick_adsr;
+
+
     block mixer = {
         .type = BLOCK_MIXER,
     };
     mixer.parents[0] = &wgate;
-    mixer.parents[1] = &qgate;
+    mixer.parents[1] = &kick_gate;
+    mixer.parents[2] = &qgate;
+
 
     stereo data;
     data.l = 0;
@@ -284,6 +307,9 @@ int main(int argc, char** argv) {
                     case SDLK_w:
                         inw.data.constant = 1.0;
                     break;
+                    case SDLK_e:
+                        kick_trigger.data.constant = 1.0;
+                    break;
                 }
             } else if (e.type == SDL_KEYUP) {
                 switch (e.key.keysym.sym) {
@@ -293,6 +319,9 @@ int main(int argc, char** argv) {
                     case SDLK_w:
                         inw.data.constant = 0.0;
                         break;
+                    case SDLK_e:
+                        kick_trigger.data.constant = 0.0;
+                    break;
                 }
             }
         }
