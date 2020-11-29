@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "block.h"
 #include "wavetable.h"
 #include "util.h"
@@ -90,6 +91,23 @@ void grab(block *b, float *buf) {
             }
             e->previous = A[i];
         }
+    } else if (b->type == BLOCK_SEQUENCER) {
+        for (int i = 0; i < FRAMES_PER_BUFFER; i++) {
+            //printf("i: %d, sn: %d\n", i, b->data.seq.sample_num);
+            if (b->data.seq.sample_num >= b->data.seq.samples_per_division * NUM_SEQ_DIVISIONS) {
+                //printf("seq reset\n");
+                b->data.seq.sample_num = 0;
+            }
+            //printf("%d\n",  b->data.seq.samples_per_division);
+            int seq_index = b->data.seq.sample_num / b->data.seq.samples_per_division; 
+            *buf++ = b->data.seq.value[seq_index];
+            b->data.seq.sample_num++;
+        }
+    } else if (b->type == BLOCK_ECHO) {
+        for (int i = 0; i < FRAMES_PER_BUFFER; i++) {
+            
+        }
+
     }
 }
 

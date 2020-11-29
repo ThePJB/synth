@@ -193,6 +193,21 @@ int main(int argc, char** argv) {
     qgate.parents[0] = &q_osc;
     qgate.parents[1] = &qadsr;
     
+    // W Seq
+    block w_seq = {
+        .type = BLOCK_SEQUENCER,
+        .data.seq = (sequencer) {
+            .samples_per_division = SAMPLE_RATE * 3 / NUM_SEQ_DIVISIONS,
+            .sample_num = 0,
+            .value = {
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            },
+        },
+    };
+        
 
 
     // W Key
@@ -216,7 +231,8 @@ int main(int argc, char** argv) {
             .state = ENV_OFF,
         }
     };
-    wadsr.parents[0] = &inw;
+    //wadsr.parents[0] = &inw;
+    wadsr.parents[0] = &w_seq;
     block wgate = {
         .type = BLOCK_GATE,
     };
@@ -342,6 +358,8 @@ int main(int argc, char** argv) {
         } else if (wadsr.data.env.state == ENV_OFF) {
             printf("OFF\n");
         }
+        printf("si: %d\n", w_seq.data.seq.sample_num / w_seq.data.seq.samples_per_division);
+        printf("sn: %d\n", w_seq.data.seq.sample_num);
             
 
 
