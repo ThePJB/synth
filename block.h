@@ -3,20 +3,76 @@
 
 #include "wavetable.h"
 #include "ringbuf.h"
+#include "string.h"
 #include <stdint.h>
 
 #define MAX_PARENTS 4
 #define FRAMES_PER_BUFFER 256
 
-typedef enum {
-    ENV_A,
-    ENV_D,
-    ENV_S,
-    ENV_R,
-    ENV_OFF,
-} envelope_state;
+class Block {
+public:
+    virtual void grab(float *buf) = 0;
+    Block *parents[MAX_PARENTS] = {0};
+    Block *get_parent(int index) { return this->parents[index]; }
+    void set_parent(int index, Block* parent) { this->parents[index] = parent; }
 
-typedef struct {
+    void try_grab_from_parent(int index, float *buf) {
+        Block *b;
+        if ((b = this->get_parent(index)) != 0) {
+            b->grab(buf);
+        } else {
+            memset(buf, 0, FRAMES_PER_BUFFER);
+        }
+    }
+
+};
+
+class Wavetable: public Block {
+public:
+    wavetable *wt;
+    Wavetable(wavetable *wt) { this->wt = wt; }
+    void grab(float *buf);
+};
+
+class Gate: public Block {
+public:
+    Gate() {};
+    void grab(float *buf);
+};
+
+class Trigger: public Block {
+public:
+    float state;
+
+    Trigger() {
+        state = 0;
+    }
+
+    void set_trigger() { this->state = 1; }
+    void unset_trigger() { this->state = 0; }
+    void grab(float *buf);
+};
+
+class Mixer: public Block {
+public:
+    float gain;
+
+    Mixer(float gain) {
+        this->gain = gain;
+    }
+    void grab(float *buf);
+};
+
+class Envelope: public Block {
+public:
+    typedef enum {
+        ENV_A,
+        ENV_D,
+        ENV_S,
+        ENV_R,
+        ENV_OFF,
+    } envelope_state;
+
     envelope_state state;
     uint32_t sample_counter;
     float previous;
@@ -28,46 +84,51 @@ typedef struct {
 
     float ref;  // last point we are coming down from
     float previous_out;
-} envelope;
+
+    Envelope(uint32_t attack, uint32_t decay, float sustain, uint32_t release) {
+        this->state = ENV_OFF;
+        this->sample_counter = 0;
+        this->previous = 0;
+
+        this->attack = attack;
+        this->decay = decay;
+        this->sustain = sustain;
+        this->release  = release;
+
+        this->ref = 0; // diff with previous?
+        this->previous_out = 0; // used?
+    }
+    void grab(float *buf);
+};
 
 #define NUM_SEQ_DIVISIONS 64
 
-typedef struct {
+class Sequencer: public Block {
+public:
     float value[NUM_SEQ_DIVISIONS];
     uint32_t samples_per_division;
     uint32_t sample_num;
-} sequencer;
+
+    Sequencer(int samples_per_division) {
+        memset(this->value, 0, 64);
+        this->samples_per_division = samples_per_division;
+        this->sample_num = 0;
+    }
+
+    void set(int index) {
+        this->value[index] = 1;
+    }
+
+    void unset(int index) {
+        this->value[index] = 0;
+    }
+    void grab(float *buf);
+};
 
 typedef struct {
     int n_samples;
     float amplitude;
     ringbuf buf;
 } echo;
-
-typedef union {
-    wavetable *wt;
-    double constant;
-    envelope env;
-    sequencer seq;
-} block_data;
-
-typedef enum {
-    BLOCK_WAVETABLE,
-    BLOCK_GATE,
-    BLOCK_TRIGGER,
-    BLOCK_CONSTANT,
-    BLOCK_ENVELOPE,
-    BLOCK_MIXER,
-    BLOCK_SEQUENCER,
-    BLOCK_ECHO,
-} block_type;
-
-typedef struct block {
-    struct block *parents[MAX_PARENTS];
-    block_data data;
-    block_type type;
-} block;
-
-void grab(block *b, float *buf);
 
 #endif

@@ -22,7 +22,7 @@ typedef struct {
     float amplitude;
     int steps;
     //wavetable *current_wavetable;
-    block *out_block;
+    Block *out_block;
 } stereo;
 
 typedef struct {
@@ -68,7 +68,7 @@ graphics graphics_init(int xres, int yres, int zoom) {
     g.renderer = SDL_CreateRenderer(g.window, -1, SDL_RENDERER_ACCELERATED);
     if (g.renderer == NULL) die("couldn't create renderer");
 
-    if (IMG_Init(IMG_INIT_PNG) != IMG_INIT_PNG);
+    if (IMG_Init(IMG_INIT_PNG) != IMG_INIT_PNG) die("couldn't initialize image loading");
 
     /* load assets */
     /*
@@ -101,7 +101,7 @@ static int test_callback(
     stereo *data = (stereo*)userData;  // whats userdata?
     float *out = (float*)outputBuffer;
     
-    grab(data->out_block, out); 
+    data->out_block->grab(out); 
     
     return 0;
 }
@@ -119,7 +119,7 @@ audio audio_init(void *data) {
             FRAMES_PER_BUFFER, // frames per buffer ??
             test_callback,
             data); 
-    if (a.err != paNoError) teardown(a.err);
+    if (a.err != paNoError) teardown();
     a.err = Pa_StartStream(a.stream); if (a.err != paNoError) print_pa_err(a.err);
 
     return a;
@@ -164,118 +164,44 @@ int main(int argc, char** argv) {
         wt_noise.data[i] = (float)rand() / (float)RAND_MAX;
     }
 
-
-    // Q Key
-    block q_osc = {
-        .type = BLOCK_WAVETABLE,
-        .data.wt = &wt_saw,
-    };
-    block inq = {
-        .type = BLOCK_TRIGGER,
-        .data.constant = 0,
-    };
-    block qadsr = {
-        .type = BLOCK_ENVELOPE,
-        .data.env = {
-            .attack = 3000,
-            .decay = 3000,
-            .sustain = 0.5,
-            .release = 4800,
-            .previous = 0,
-            .sample_counter = 0,
-            .state = ENV_OFF,
-        }
-    };
-    qadsr.parents[0] = &inq;
-    block qgate = {
-        .type = BLOCK_GATE,
-    };
-    qgate.parents[0] = &q_osc;
-    qgate.parents[1] = &qadsr;
+    auto q_osc = Wavetable(&wt_sine);
     
-    // W Seq
-    block w_seq = {
-        .type = BLOCK_SEQUENCER,
-        .data.seq = (sequencer) {
-            .samples_per_division = SAMPLE_RATE * 3 / NUM_SEQ_DIVISIONS,
-            .sample_num = 0,
-            .value = {
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            },
-        },
-    };
-        
+    auto q_trig = Trigger();
+    auto q_env = Envelope(3000, 3000, 0.5, 4800);
+    q_env.set_parent(0, &q_trig);
+
+    auto q_gate = Gate();
+    q_gate.set_parent(0, &q_osc);
+    q_gate.set_parent(1, &q_env);
+
+    auto lfo = Wavetable(&wt_lfo);
+    auto lfo_gate = Gate();
+    lfo_gate.set_parent(0, &q_osc);
+    lfo_gate.set_parent(1, &lfo);
 
 
-    // W Key
-    block w_osc = {
-        .type = BLOCK_WAVETABLE,
-        .data.wt = &wt_noise,
-    };
-    block inw = {
-        .type = BLOCK_TRIGGER,
-        .data.constant = 0,
-    };
-    block wadsr = {
-        .type = BLOCK_ENVELOPE,
-        .data.env = {
-            .attack = 1000,
-            .decay = 20000,
-            .sustain = 0.0,
-            .release = 3000,
-            .previous = 0,
-            .sample_counter = 0,
-            .state = ENV_OFF,
-        }
-    };
-    //wadsr.parents[0] = &inw;
-    wadsr.parents[0] = &w_seq;
-    block wgate = {
-        .type = BLOCK_GATE,
-    };
-    wgate.parents[0] = &w_osc;
-    wgate.parents[1] = &wadsr;
+    auto w_osc = Wavetable(&wt_noise);
+    auto w_seq = Sequencer(SAMPLE_RATE * 3 / NUM_SEQ_DIVISIONS);
+    w_seq.set(0);
+    w_seq.set(16);
+    w_seq.set(32);
+    w_seq.set(48);
+    w_seq.set(56);
+    
+    auto w_env = Envelope(1000, 20000, 0, 3000);
+    auto w_gate = Gate();
+
+    w_gate.set_parent(0, &w_env);
+    w_gate.set_parent(1, &w_osc);
+
+    w_env.set_parent(0, &w_seq);
 
 
-    // E Key
-    block kick_osc = {
-        .type = BLOCK_WAVETABLE,
-        .data.wt = &wt_square,
-    };
-    block kick_trigger = {
-        .type = BLOCK_TRIGGER,
-        .data.constant = 0,
-    };
-    block kick_adsr = {
-        .type = BLOCK_ENVELOPE,
-        .data.env = {
-            .attack = 2400,
-            .decay = 4800,
-            .sustain = 0.0,
-            .release = 4800,
-            .previous = 0,
-            .sample_counter = 0,
-            .state = ENV_OFF,
-        }
-    };
-    kick_adsr.parents[0] = &kick_trigger;
-    block kick_gate = {
-        .type = BLOCK_GATE,
-    };
-    kick_gate.parents[0] = &kick_osc;
-    kick_gate.parents[1] = &kick_adsr;
-
-
-    block mixer = {
-        .type = BLOCK_MIXER,
-    };
-    mixer.parents[0] = &wgate;
-    mixer.parents[1] = &kick_gate;
-    mixer.parents[2] = &qgate;
-
+    
+    auto mixer = Mixer(0.5);
+    mixer.set_parent(0, &q_gate);
+    mixer.set_parent(1, &w_gate);
+    mixer.set_parent(2, &q_gate);
 
     stereo data;
     data.l = 0;
@@ -303,41 +229,21 @@ int main(int argc, char** argv) {
                     case SDLK_ESCAPE:
                         teardown();
                         break;
-                    case SDLK_h:
-                        data.steps--;
-                        printf("steps set to %d\n", data.steps);
-                        break;
-                    case SDLK_l:
-                        data.steps++;
-                        printf("steps set to %d\n", data.steps);
-                        break;
-                    case SDLK_j:
-                        data.amplitude -= 0.1;  
-                        break;
-                    case SDLK_k:
-                        data.amplitude += 0.1;  
-                        break;
                     case SDLK_q:
-                        inq.data.constant = 1.0;
-                    break;
+                        q_trig.set_trigger();
+                        break;
                     case SDLK_w:
-                        inw.data.constant = 1.0;
-                    break;
-                    case SDLK_e:
-                        kick_trigger.data.constant = 1.0;
-                    break;
+                        //w_trig.set_trigger();
+                        break;
                 }
             } else if (e.type == SDL_KEYUP) {
                 switch (e.key.keysym.sym) {
                     case SDLK_q:
-                        inq.data.constant = 0.0;
+                        q_trig.unset_trigger();
                         break;
                     case SDLK_w:
-                        inw.data.constant = 0.0;
+                        //w_trig.unset_trigger();
                         break;
-                    case SDLK_e:
-                        kick_trigger.data.constant = 0.0;
-                    break;
                 }
             }
         }
@@ -345,23 +251,6 @@ int main(int argc, char** argv) {
         // clicc
         if (SDL_GetMouseState(&mouse_x, &mouse_y) & SDL_BUTTON(SDL_BUTTON_LEFT)) {
         }
-
-        // print debug info for envelope
-        if (wadsr.data.env.state == ENV_A) {
-            printf("A\n");
-        } else if (wadsr.data.env.state == ENV_D) {
-            printf("D\n");
-        } else if (wadsr.data.env.state == ENV_S) {
-            printf("S\n");
-        } else if (wadsr.data.env.state == ENV_R) {
-            printf("R\n");
-        } else if (wadsr.data.env.state == ENV_OFF) {
-            printf("OFF\n");
-        }
-        printf("si: %d\n", w_seq.data.seq.sample_num / w_seq.data.seq.samples_per_division);
-        printf("sn: %d\n", w_seq.data.seq.sample_num);
-            
-
 
         /* draw */
         SDL_SetRenderDrawColor(gg.renderer, 0,0,0,255);
