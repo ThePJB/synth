@@ -10,6 +10,7 @@
 #include "util.h"
 #include "wavetable.h"
 #include "block.h"
+#include "graphics.h"
 
 #define SAMPLE_RATE (48000)
 
@@ -25,14 +26,7 @@ typedef struct {
     Block *out_block;
 } stereo;
 
-typedef struct {
-    SDL_Renderer *renderer;
-    SDL_Window *window;
-    SDL_Texture *atlas;
-    int xres;
-    int yres;
-    int zoom_factor;
-} graphics;
+
 
 typedef struct {
    PaStream *stream;
@@ -40,9 +34,9 @@ typedef struct {
 } audio;
 
 
-void teardown();
 void print_pa_err(PaError err);
-graphics gg;
+void teardown();
+
 audio ag;
 
 wavetable wt_sine;
@@ -52,38 +46,6 @@ wavetable wt_triangle;
 wavetable wt_noise;
 
 wavetable *wavetables[] = {&wt_sine, &wt_saw, &wt_square, &wt_triangle, &wt_noise};
-
-graphics graphics_init(int xres, int yres, int zoom) {
-    graphics g = {0};
-
-    /* setup */
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) die("couldn't init sdl");
-
-    g.window = SDL_CreateWindow("Best Twin Stick Shooter", 
-        SDL_WINDOWPOS_UNDEFINED, 
-        SDL_WINDOWPOS_UNDEFINED, 
-        xres, yres, SDL_WINDOW_SHOWN);
-    if (g.window == NULL) die("couldn't create window");
-
-    g.renderer = SDL_CreateRenderer(g.window, -1, SDL_RENDERER_ACCELERATED);
-    if (g.renderer == NULL) die("couldn't create renderer");
-
-    if (IMG_Init(IMG_INIT_PNG) != IMG_INIT_PNG) die("couldn't initialize image loading");
-
-    /* load assets */
-    /*
-    SDL_Surface* loaded_surface = IMG_Load("assets/atlas.png");
-    g.atlas = SDL_CreateTextureFromSurface(g.renderer, loaded_surface);
-    if (g.atlas == NULL) die("couldn't create texture");
-    SDL_FreeSurface(loaded_surface);
-    */
-
-    g.xres = xres;
-    g.yres = yres;
-    g.zoom_factor = zoom;
-
-    return g;
-}
 
 
 #define xres 640
@@ -211,7 +173,8 @@ int main(int argc, char** argv) {
     data.out_block = &mixer;
     //data.current_wavetable = wavetables[0];
 
-    gg = graphics_init(xres, yres, 1); 
+    Graphics::init(xres, yres, "mod synth");
+
     ag = audio_init(&data);
 
     int frame_period = 1000000/180;
@@ -253,11 +216,13 @@ int main(int argc, char** argv) {
         }
 
         /* draw */
-        SDL_SetRenderDrawColor(gg.renderer, 0,0,0,255);
-        SDL_RenderClear(gg.renderer);
+        auto g = Graphics::get();
+        SDL_SetRenderDrawColor(g->renderer, 0,0,0,255);
+        SDL_RenderClear(g->renderer);
 
+        q_trig.draw();
 
-        SDL_RenderPresent(gg.renderer);
+        SDL_RenderPresent(g->renderer);
 
         uint64_t frame_end_us = get_us();
         uint64_t delta_us = frame_end_us - frame_start_us;
@@ -266,13 +231,6 @@ int main(int argc, char** argv) {
         }
         //printf("frame time %f ms\n", delta_us / 1000.0);
     }
-}
-
-void teardown_graphics() {
-    SDL_DestroyRenderer(gg.renderer);
-    SDL_DestroyWindow(gg.window);
-    IMG_Quit();
-    SDL_Quit();
 }
 
 void print_pa_err(PaError err) {
@@ -284,6 +242,6 @@ void teardown() {
     ag.err = Pa_StopStream(ag.stream); if (ag.err != paNoError) print_pa_err(ag.err);
     ag.err = Pa_CloseStream(ag.stream); if (ag.err != paNoError) print_pa_err(ag.err);
     Pa_Terminate();
-    teardown_graphics();
+    Graphics::teardown();
     exit(0);
 }

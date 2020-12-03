@@ -4,17 +4,32 @@
 #include "wavetable.h"
 #include "ringbuf.h"
 #include "string.h"
+#include "graphics.h"
 #include <stdint.h>
+#include <SDL.h>
+
 
 #define MAX_PARENTS 4
 #define FRAMES_PER_BUFFER 256
 
-class Block {
-public:
-    virtual void grab(float *buf) = 0;
+struct Block {
+    int x = 0;
+    int y = 0;
+    int w = 100;
+    int h = 100;
+    uint8_t r = 20;
+    uint8_t g = 20;
+    uint8_t b = 20;
     Block *parents[MAX_PARENTS] = {0};
-    Block *get_parent(int index) { return this->parents[index]; }
-    void set_parent(int index, Block* parent) { this->parents[index] = parent; }
+    Block *child = 0;
+
+
+    virtual void grab(float *buf) = 0;
+    void draw() {
+        auto g = Graphics::get();
+        SDL_SetRenderDrawColor(g->renderer, this->r, this->g, this->b, 255);
+        SDL_RenderFillRect(g->renderer, &SDL_Rect{this->x, this->y, this->w, this->h});
+    }
 
     void try_grab_from_parent(int index, float *buf) {
         Block *b;
@@ -25,23 +40,21 @@ public:
         }
     }
 
+
 };
 
-class Wavetable: public Block {
-public:
+struct Wavetable: Block {
     wavetable *wt;
     Wavetable(wavetable *wt) { this->wt = wt; }
     void grab(float *buf);
 };
 
-class Gate: public Block {
-public:
+struct Gate: Block {
     Gate() {};
     void grab(float *buf);
 };
 
-class Trigger: public Block {
-public:
+struct Trigger: Block {
     float state;
 
     Trigger() {
@@ -53,8 +66,7 @@ public:
     void grab(float *buf);
 };
 
-class Mixer: public Block {
-public:
+struct Mixer: Block {
     float gain;
 
     Mixer(float gain) {
@@ -63,8 +75,7 @@ public:
     void grab(float *buf);
 };
 
-class Envelope: public Block {
-public:
+struct Envelope: Block {
     typedef enum {
         ENV_A,
         ENV_D,
@@ -103,8 +114,7 @@ public:
 
 #define NUM_SEQ_DIVISIONS 64
 
-class Sequencer: public Block {
-public:
+struct Sequencer: Block {
     float value[NUM_SEQ_DIVISIONS];
     uint32_t samples_per_division;
     uint32_t sample_num;
