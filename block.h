@@ -17,23 +17,32 @@ struct Block {
     int y = 0;
     int w = 100;
     int h = 100;
-    uint8_t r = 20;
-    uint8_t g = 20;
-    uint8_t b = 20;
+    uint8_t r = 40;
+    uint8_t g = 40;
+    uint8_t b = 40;
     Block *parents[MAX_PARENTS] = {0};
     Block *child = 0;
 
+    SDL_Rect get_rect() {
+        return SDL_Rect{this->x, this->y, this->w, this->h};
+    }
 
     virtual void grab(float *buf) = 0;
     void draw() {
         auto g = Graphics::get();
         SDL_SetRenderDrawColor(g->renderer, this->r, this->g, this->b, 255);
-        SDL_RenderFillRect(g->renderer, &SDL_Rect{this->x, this->y, this->w, this->h});
+        SDL_RenderFillRect(g->renderer, &this->get_rect());
+
+        // draw child connection
+        if (this->child != 0) {
+            SDL_SetRenderDrawColor(g->renderer, 255, 0, 0, 255);
+            SDL_RenderDrawLine(g->renderer, this->x + this->w, this->y, this->child->x, this->child->y);
+        }
     }
 
     void try_grab_from_parent(int index, float *buf) {
         Block *b;
-        if ((b = this->get_parent(index)) != 0) {
+        if ((b = this->parents[index]) != 0) {
             b->grab(buf);
         } else {
             memset(buf, 0, FRAMES_PER_BUFFER);
@@ -59,6 +68,18 @@ struct Trigger: Block {
 
     Trigger() {
         state = 0;
+    }
+    virtual void draw() {
+        Block::draw();
+        auto g = Graphics::get();
+        SDL_Rect indicator = SDL_Rect{this->x + 3, this->y + 3, 3, 3};
+        if (state == 1) {
+            SDL_SetRenderDrawColor(g->renderer, 255,255,255,255);
+        } else {
+            SDL_SetRenderDrawColor(g->renderer, 0,0,0,255);
+        }
+        SDL_RenderFillRect(g->renderer, &indicator);
+
     }
 
     void set_trigger() { this->state = 1; }

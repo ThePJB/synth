@@ -7,18 +7,24 @@
 #define MAX_BLOCKS 100
 
 struct Workspace {
-    Block *block_ptrs[MAX_BLOCKS];
+    Block *block_ptrs[MAX_BLOCKS] = {0};
     int num_blocks = 0;
 
     Workspace() {};
 
     void draw() {
-        for (int i = 0; i < MAX_BLOCKS) {
-            this->blocks[i]->draw();
+        for (int i = 0; i < num_blocks; i++) {
+            if (!this->block_ptrs[i]) {
+                printf("warning, bad block %d\n", i);
+            }
+            this->block_ptrs[i]->draw();
         }
     }
 
     void connect(Block *parent, Block* child) {
+        if (!parent) printf("null parent");
+        if (!child) printf("null child");
+
         parent->child = child;
         for (int i = 0; i < MAX_PARENTS; i++) {
             if (child->parents[i] == 0) {
@@ -29,6 +35,9 @@ struct Workspace {
     }
 
     void disconnect(Block *parent, Block* child) {
+        if (!parent) printf("null parent");
+        if (!child) printf("null child");
+
         parent->child = 0;
         for (int i = 0; i < MAX_PARENTS; i++) {
                 if (child->parents[i] == parent) {
@@ -37,11 +46,8 @@ struct Workspace {
                 }
             }
     }
-
-    Block *alloc_block() {
-        Block *new_block = (Block*)calloc(sizeof(Block), 1);
-        this->block_ptrs[num_blocks++] = new_block;
-        return new_block;
+    void register_block(Block *b) {
+        this->block_ptrs[num_blocks++] = b;
     }
 
     void delete_block(Block *block) {

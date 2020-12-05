@@ -36,3 +36,10 @@ also probably a refactor is due
 --------------
 
 so yeah theres a bug with the new way of doing things where sound is weird. lets try drawing something and maybe use that to debug, e.g. draw connections and show if they are alive
+
+---------------
+
+nb crashing in calloc call 51 alloc block.
+is it 1st one?
+
+must be smashing the heap before then (corrupted top size)

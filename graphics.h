@@ -22,7 +22,10 @@ struct Graphics {
     Graphics() {};
 
     static void init(int xres, int yres, char const *title) {
-        graphics_instance = (Graphics*)calloc(sizeof(Graphics), 1);
+        printf("initializing graphics...\n");
+        graphics_instance = new Graphics();
+        
+        //(Graphics*)malloc(sizeof(Graphics));
 
         /* setup */
         if (SDL_Init(SDL_INIT_VIDEO) < 0) die("couldn't init sdl");

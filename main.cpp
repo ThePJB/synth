@@ -11,6 +11,7 @@
 #include "wavetable.h"
 #include "block.h"
 #include "graphics.h"
+#include "workspace.h"
 
 #define SAMPLE_RATE (48000)
 
@@ -48,9 +49,10 @@ wavetable wt_noise;
 wavetable *wavetables[] = {&wt_sine, &wt_saw, &wt_square, &wt_triangle, &wt_noise};
 
 
-#define xres 640
-#define yres 480
+#define xres 1920
+#define yres 1080
 
+int audio_warning = 0;
 
 static int test_callback(
         const void *inputBuffer,
@@ -63,7 +65,12 @@ static int test_callback(
     stereo *data = (stereo*)userData;  // whats userdata?
     float *out = (float*)outputBuffer;
     
-    data->out_block->grab(out); 
+    if (data->out_block) {
+        //data->out_block->grab(out); 
+        audio_warning = 0;
+    } else {
+        audio_warning = 1;
+    }
     
     return 0;
 }
@@ -87,6 +94,10 @@ audio audio_init(void *data) {
     return a;
 }
 
+bool rect_test(int x, int y, SDL_Rect r) {
+    return x > r.x && x < r.x + r.w &&
+            y > r.y && y < r.y + r.h;
+}
 
 int main(int argc, char** argv) { 
     
@@ -126,51 +137,44 @@ int main(int argc, char** argv) {
         wt_noise.data[i] = (float)rand() / (float)RAND_MAX;
     }
 
-    auto q_osc = Wavetable(&wt_sine);
+    Workspace ws = Workspace();
+    Wavetable *q_osc = new Wavetable(&wt_sine); ws.register_block(q_osc);
+    Trigger *q_trig = new Trigger();  ws.register_block(q_trig);
+    Envelope *q_env = new Envelope(3000, 3000, 0.5, 4800); ws.register_block(q_env);
+    ws.connect(q_trig, q_env);
     
-    auto q_trig = Trigger();
-    auto q_env = Envelope(3000, 3000, 0.5, 4800);
-    q_env.set_parent(0, &q_trig);
-
-    auto q_gate = Gate();
-    q_gate.set_parent(0, &q_osc);
-    q_gate.set_parent(1, &q_env);
-
-    auto lfo = Wavetable(&wt_lfo);
-    auto lfo_gate = Gate();
-    lfo_gate.set_parent(0, &q_osc);
-    lfo_gate.set_parent(1, &lfo);
-
-
-    auto w_osc = Wavetable(&wt_noise);
-    auto w_seq = Sequencer(SAMPLE_RATE * 3 / NUM_SEQ_DIVISIONS);
-    w_seq.set(0);
-    w_seq.set(16);
-    w_seq.set(32);
-    w_seq.set(48);
-    w_seq.set(56);
+    Gate *q_gate = new Gate(); ws.register_block(q_gate);
+    ws.connect(q_osc, q_gate);
+    ws.connect(q_env, q_gate);
     
-    auto w_env = Envelope(1000, 20000, 0, 3000);
-    auto w_gate = Gate();
-
-    w_gate.set_parent(0, &w_env);
-    w_gate.set_parent(1, &w_osc);
-
-    w_env.set_parent(0, &w_seq);
-
-
+/*
+    MKBLOCK(w_osc) Wavetable(&wt_noise);
+    MKBLOCK(w_seq) Sequencer(SAMPLE_RATE * 3 / NUM_SEQ_DIVISIONS);
+    ((Sequencer*)w_seq)->set(0); // wat do about this shit
+    ((Sequencer*)w_seq)->set(16);
+    ((Sequencer*)w_seq)->set(32);
+    ((Sequencer*)w_seq)->set(48);
+    ((Sequencer*)w_seq)->set(56);
     
-    auto mixer = Mixer(0.5);
-    mixer.set_parent(0, &q_gate);
-    mixer.set_parent(1, &w_gate);
-    mixer.set_parent(2, &q_gate);
+    MKBLOCK(w_env) Envelope(1000, 20000, 0, 3000);
+    MKBLOCK(w_gate) Gate();
+
+    ws.connect(w_seq, w_env);
+    ws.connect(w_env, w_gate);
+    ws.connect(w_osc, w_gate);
+    */
+    Mixer *mixer = new Mixer(0.5); ws.register_block(mixer);
+    ws.connect(q_gate, mixer);
+    //ws.connect(w_gate, mixer);
+
+    printf("mixer %p\n", mixer);
 
     stereo data;
     data.l = 0;
     data.r = 0;
     data.amplitude = 0.5;
     data.steps = 1;
-    data.out_block = &mixer;
+    data.out_block = mixer;
     //data.current_wavetable = wavetables[0];
 
     Graphics::init(xres, yres, "mod synth");
@@ -180,6 +184,11 @@ int main(int argc, char** argv) {
     int frame_period = 1000000/180;
 
     SDL_Event e;
+
+    Block *rollover_block;
+    int last_click_x;
+    int last_click_y;
+
     while (true) {
         int mouse_x = 0;
         int mouse_y = 0;
@@ -187,13 +196,32 @@ int main(int argc, char** argv) {
         uint64_t frame_start_us = get_us();
         while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) teardown();
+            if (e.type == SDL_MOUSEMOTION) {
+                if (e.motion.state & SDL_BUTTON_LMASK) {
+                    // dragging
+                    if (!rollover_block) continue;
+                    rollover_block->x += e.motion.xrel;
+                    rollover_block->y += e.motion.yrel;
+                } else {
+                    // rollover
+                    bool any_rollover = 0;
+                    for (int i = 0; i < ws.num_blocks; i++) {
+                        if (rect_test(e.motion.x, e.motion.y, ws.block_ptrs[i]->get_rect())) {
+                            rollover_block = ws.block_ptrs[i];
+                            any_rollover = 1;
+                            break;
+                        }
+                    }
+                    if (!any_rollover) rollover_block = 0;
+                }
+            }
             if (e.type == SDL_KEYDOWN) {
                 switch (e.key.keysym.sym) {
                     case SDLK_ESCAPE:
                         teardown();
                         break;
                     case SDLK_q:
-                        q_trig.set_trigger();
+                        ((Trigger*)q_trig)->set_trigger();
                         break;
                     case SDLK_w:
                         //w_trig.set_trigger();
@@ -202,13 +230,17 @@ int main(int argc, char** argv) {
             } else if (e.type == SDL_KEYUP) {
                 switch (e.key.keysym.sym) {
                     case SDLK_q:
-                        q_trig.unset_trigger();
+                        ((Trigger*)q_trig)->unset_trigger();
                         break;
                     case SDLK_w:
                         //w_trig.unset_trigger();
                         break;
                 }
             }
+        }
+
+        if (audio_warning) {
+            printf("warning: no out block");
         }
 
         // clicc
@@ -220,7 +252,7 @@ int main(int argc, char** argv) {
         SDL_SetRenderDrawColor(g->renderer, 0,0,0,255);
         SDL_RenderClear(g->renderer);
 
-        q_trig.draw();
+        ws.draw();
 
         SDL_RenderPresent(g->renderer);
 
