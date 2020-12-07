@@ -17,7 +17,10 @@ struct Workspace {
             if (!this->block_ptrs[i]) {
                 printf("warning, bad block %d\n", i);
             }
-            this->block_ptrs[i]->draw();
+            auto b = this->block_ptrs[i];
+            b->draw();
+            SDL_Rect r = {b->x + b->w, b->y, 5, b->h};
+            Block::vu_meter(r, b->avg_volume);
         }
     }
 

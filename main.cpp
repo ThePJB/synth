@@ -66,7 +66,7 @@ static int test_callback(
     float *out = (float*)outputBuffer;
     
     if (data->out_block) {
-        //data->out_block->grab(out); 
+        data->out_block->grab_next(out); 
         audio_warning = 0;
     } else {
         audio_warning = 1;
@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
     int wt_len = 48000;
     int wt_sel = 0;
 
-    wt_sine = wt_create(wt_len, 200);
+    wt_sine = wt_create(wt_len, 400);
     for (int i = 0; i < wt_len; i++) {
         wt_sine.data[i] = (float)sin((double)i/(double)wt_len * 2.0 * M_PI);
     }
@@ -139,12 +139,17 @@ int main(int argc, char** argv) {
 
     Workspace ws = Workspace();
     Wavetable *q_osc = new Wavetable(&wt_sine); ws.register_block(q_osc);
+    Wavetable *q_lfo = new Wavetable(&wt_lfo); ws.register_block(q_lfo);
+    Gate *q_lfo_gate = new Gate(); ws.register_block(q_lfo_gate);
+    ws.connect(q_lfo, q_lfo_gate);
+    ws.connect(q_osc, q_lfo_gate);
+
     Trigger *q_trig = new Trigger();  ws.register_block(q_trig);
     Envelope *q_env = new Envelope(3000, 3000, 0.5, 4800); ws.register_block(q_env);
     ws.connect(q_trig, q_env);
     
     Gate *q_gate = new Gate(); ws.register_block(q_gate);
-    ws.connect(q_osc, q_gate);
+    ws.connect(q_lfo_gate, q_gate);
     ws.connect(q_env, q_gate);
     
 /*
@@ -177,7 +182,16 @@ int main(int argc, char** argv) {
     data.out_block = mixer;
     //data.current_wavetable = wavetables[0];
 
+    q_trig->set_pos(100, 100);
+    q_env->set_pos(250, 100);
+    q_lfo->set_pos(100, 400);
+    q_lfo_gate->set_pos(250, 400);
+    q_osc->set_pos(100, 250);
+    q_gate->set_pos(550, 250);
+    mixer->set_pos(700, 250);
+
     Graphics::init(xres, yres, "mod synth");
+    MessageQueue::init();
 
     ag = audio_init(&data);
 
@@ -222,6 +236,7 @@ int main(int argc, char** argv) {
                         break;
                     case SDLK_q:
                         ((Trigger*)q_trig)->set_trigger();
+                        //((Envelope*)q_env)->state = Envelope::ENV_A;
                         break;
                     case SDLK_w:
                         //w_trig.set_trigger();
@@ -237,6 +252,11 @@ int main(int argc, char** argv) {
                         break;
                 }
             }
+        }
+
+        auto mq = MessageQueue::get();
+        while (mq->has_more()) {
+            mq->pop().print();
         }
 
         if (audio_warning) {
