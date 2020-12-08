@@ -138,9 +138,9 @@ int main(int argc, char** argv) {
     }
 
     Workspace ws = Workspace();
-    Wavetable *q_osc = new Wavetable(&wt_sine); ws.register_block(q_osc);
-    Wavetable *q_lfo = new Wavetable(&wt_lfo); ws.register_block(q_lfo);
-    Gate *q_lfo_gate = new Gate(); ws.register_block(q_lfo_gate);
+    Wavetable *q_osc = new Wavetable("sine wt", &wt_sine); ws.register_block(q_osc);
+    Wavetable *q_lfo = new Wavetable("lfo wt", &wt_lfo); ws.register_block(q_lfo);
+    Gate *q_lfo_gate = new Gate("lfo gate"); ws.register_block(q_lfo_gate);
     ws.connect(q_lfo, q_lfo_gate);
     ws.connect(q_osc, q_lfo_gate);
 
@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
     Envelope *q_env = new Envelope(3000, 3000, 0.5, 4800); ws.register_block(q_env);
     ws.connect(q_trig, q_env);
     
-    Gate *q_gate = new Gate(); ws.register_block(q_gate);
+    Gate *q_gate = new Gate("q gate"); ws.register_block(q_gate);
     ws.connect(q_lfo_gate, q_gate);
     ws.connect(q_env, q_gate);
     
@@ -191,7 +191,6 @@ int main(int argc, char** argv) {
     mixer->set_pos(700, 250);
 
     Graphics::init(xres, yres, "mod synth");
-    MessageQueue::init();
 
     ag = audio_init(&data);
 
@@ -254,9 +253,10 @@ int main(int argc, char** argv) {
             }
         }
 
-        auto mq = MessageQueue::get();
-        while (mq->has_more()) {
-            mq->pop().print();
+        while (BlockMQ.has_more()) {
+            BlockMessage msg;
+            BlockMQ.pop(&msg);
+            msg.print();
         }
 
         if (audio_warning) {

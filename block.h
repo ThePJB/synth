@@ -6,6 +6,7 @@
 #include "string.h"
 #include "graphics.h"
 #include "message_queue.h"
+#include "util.h"
 #include <stdint.h>
 #include <SDL.h>
 
@@ -13,19 +14,29 @@
 #define MAX_PARENTS 4
 #define FRAMES_PER_BUFFER 256
 
-struct FailGrabMessage: Message {
+
+struct Block;
+
+struct BlockMessage {
+    enum MessageType {
+        TEST,
+        FAIL_GRAB,
+    };
+    MessageType type;
     Block *parent;
     Block *child;
 
-    FailGrabMessage(Block *parent, Block *child) {
+    BlockMessage() {};
+    BlockMessage(MessageType type, Block *parent, Block *child) {
+        this->type = type;
         this->parent = parent;
         this->child = child;
     }
 
-    virtual void print() {
-        printf("Failed to grab from %s to %s\n", parent, child);
-    }
-}
+    void print();
+};
+
+static MessageQueue BlockMQ = MessageQueue(sizeof(BlockMessage), 102400);
 
 struct Block {
     int x = 0;
@@ -39,6 +50,10 @@ struct Block {
     Block *child = 0;
     float avg_volume;
     char *name;
+
+    Block(char *name) : name{name} {}; 
+    Block() : Block("unnamed") {};
+
 
     SDL_Rect get_rect() {
         return SDL_Rect{this->x, this->y, this->w, this->h};
@@ -98,7 +113,8 @@ struct Block {
         if ((b = this->parents[index]) != 0) {
             b->grab_next(buf);
         } else {
-            MessageQueue::get()->push(FailGrabMessage(this->parents[index], this));
+            BlockMessage msg = BlockMessage(BlockMessage::MessageType::FAIL_GRAB, this->parents[index], this);
+            BlockMQ.push(&msg);
         }
     }
 
@@ -110,7 +126,7 @@ struct Block {
 
 struct Wavetable: Block {
     wavetable *wt;
-    Wavetable(wavetable *wt) { this->wt = wt; }
+    Wavetable(char *name, wavetable *wt) : Block(name), wt{wt} {};
     void grab_next_impl(float *buf) {
         for (int i = 0; i < FRAMES_PER_BUFFER; i++) {
             *buf++ = wt_sample(wt);
@@ -120,7 +136,7 @@ struct Wavetable: Block {
 };
 
 struct Gate: Block {
-    Gate() {};
+    Gate(char *name) : Block(name) {};
     void grab_next_impl(float *buf) {
         float A[FRAMES_PER_BUFFER] = {0};
         float B[FRAMES_PER_BUFFER] = {0};
@@ -169,6 +185,9 @@ struct Mixer: Block {
         this->gain = gain;
     }
     void grab_next_impl(float *buf) {
+        BlockMessage msg = BlockMessage(BlockMessage::MessageType::TEST, 0, this);
+        BlockMQ.push(&msg);
+
         float A[FRAMES_PER_BUFFER];
         float B[FRAMES_PER_BUFFER];
         float C[FRAMES_PER_BUFFER];
