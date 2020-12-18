@@ -25,8 +25,7 @@ typedef struct {
     block *out_block;
 } stereo;
 
-typedef struct {
-    SDL_Renderer *renderer;
+typedef struct { SDL_Renderer *renderer;
     SDL_Window *window;
     SDL_Texture *atlas;
     int xres;
